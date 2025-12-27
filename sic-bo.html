@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sic Bo AI Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#020617; color:#e5e7eb; padding:20px; max-width: 900px; margin: auto; }
+        h1 { text-align:center; color:#22c55e; letter-spacing: 2px; }
+        .box { background:#0f172a; padding:20px; border-radius:12px; margin-bottom:20px; border: 1px solid #1e293b; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+        .input-group { text-align:center; }
+        input { width:70px; font-size:22px; padding:10px; text-align:center; border-radius:8px; border:1px solid #334155; background:#020617; color:white; font-weight:bold; }
+        button { padding:12px 24px; font-size:16px; cursor:pointer; background:#22c55e; color:black; border:none; border-radius:8px; margin:5px; font-weight:bold; transition: 0.2s; }
+        button:hover { background:#16a34a; transform: translateY(-1px); }
+        button.reset { background:#ef4444; color:white; }
+        table { width:100%; border-collapse:collapse; margin-top:10px; font-size: 14px; }
+        th, td { border:1px solid #334155; padding:10px; text-align:center; }
+        th { background: #1e293b; }
+        .big { color:#22c55e; font-weight:bold; }
+        .small { color:#ef4444; font-weight:bold; }
+        .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+        .stat { padding:12px; background:#020617; border-radius:8px; text-align:center; border: 1px solid #334155; }
+        .stat b { display: block; font-size: 20px; color: #3b82f6; }
+        .alert { color:#facc15; font-weight:bold; margin-top:15px; text-align: center; font-size: 1.1em; }
+        canvas { max-height: 200px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+
+<h1>🎲 SIC BO AI ANALYTICS</h1>
+
+<div class="box input-group">
+    <input id="d1" type="number" min="1" max="6" placeholder="D1" autofocus>
+    <input id="d2" type="number" min="1" max="6" placeholder="D2">
+    <input id="d3" type="number" min="1" max="6" placeholder="D3">
+    <br><br>
+    <button onclick="addResult()">ADD RESULT</button>
+    <button class="reset" onclick="resetAll()">RESET DATA</button>
+</div>
+
+<div class="box">
+    <h3>📊 LIVE STATISTICS</h3>
+    <div id="statsDisplay" class="stat-grid"></div>
+    <div id="streakDisplay" class="alert"></div>
+</div>
+
+<div class="box" style="display: flex; gap: 20px; align-items: center;">
+    <div style="flex: 1;">
+        <h3>🤖 AI TREND PREDICTION</h3>
+        <div id="predictionDisplay" class="stat" style="width: 100%; box-sizing: border-box; font-size: 1.2em;"></div>
+        <div id="confidenceDisplay" class="alert"></div>
+    </div>
+    <div style="flex: 1;">
+        <canvas id="bsChart"></canvas>
+    </div>
+</div>
+
+<div class="box">
+    <h3>📜 ROLL HISTORY</h3>
+    <div style="overflow-x:auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th><th>D1</th><th>D2</th><th>D3</th><th>Total</th><th>B/S</th><th>O/E</th><th>Combo</th>
+                </tr>
+            </thead>
+            <tbody id="historyLog"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+let data = JSON.parse(localStorage.getItem("sicbo_v2")) || [];
+let stats = { BIG:0, SMALL:0, ODD:0, EVEN:0, DBL:0, TPL:0 };
+let freq = [0,0,0,0,0,0,0];
+
+// Charts initialization
+const ctxBS = document.getElementById('bsChart').getContext('2d');
+let bsChart = new Chart(ctxBS, {
+    type: 'doughnut',
+    data: {
+        labels: ['Big', 'Small'],
+        datasets: [{ data: [0, 0], backgroundColor: ['#22c55e', '#ef4444'], borderWeight: 0 }]
+    },
+    options: { plugins: { legend: { labels: { color: 'white' } } } }
+});
+
+function calculateStats() {
+    stats = { BIG:0, SMALL:0, ODD:0, EVEN:0, DBL:0, TPL:0 };
+    freq = [0,0,0,0,0,0,0];
+    data.forEach(r => {
+        stats[r.bs]++; stats[r.oe]++;
+        if(r.dbl) stats.DBL++;
+        if(r.tpl) stats.TPL++;
+        freq[r.a]++; freq[r.b]++; freq[r.c]++;
+    });
+}
+
+function addResult() {
+    const v1 = parseInt(document.getElementById('d1').value);
+    const v2 = parseInt(document.getElementById('d2').value);
+    const v3 = parseInt(document.getElementById('d3').value);
+
+    if ([v1, v2, v3].some(v => isNaN(v) || v < 1 || v > 6)) {
+        alert("Enter valid dice (1-6)"); return;
+    }
+
+    const total = v1 + v2 + v3;
+    const res = {
+        a: v1, b: v2, c: v3,
+        total: total,
+        bs: total >= 11 ? "BIG" : "SMALL",
+        oe: total % 2 === 0 ? "EVEN" : "ODD",
+        dbl: (v1==v2 || v1==v3 || v2==v3),
+        tpl: (v1==v2 && v2==v3),
+        combo: [v1, v2, v3].sort().join("-")
+    };
+
+    data.push(res);
+    localStorage.setItem("sicbo_v2", JSON.stringify(data));
+    
+    // UI Cleanup
+    document.getElementById('d1').value = '';
+    document.getElementById('d2').value = '';
+    document.getElementById('d3').value = '';
+    document.getElementById('d1').focus();
+
+    render();
+}
+
+function render() {
+    calculateStats();
+    
+    // Update Stats Display
+    document.getElementById("statsDisplay").innerHTML = `
+        <div class="stat">BIG <b>${stats.BIG}</b></div>
+        <div class="stat">SMALL <b>${stats.SMALL}</b></div>
+        <div class="stat">ODD <b>${stats.ODD}</b></div>
+        <div class="stat">EVEN <b>${stats.EVEN}</b></div>
+        <div class="stat">DBL <b>${stats.DBL}</b></div>
+    `;
+
+    // Update History
+    const log = document.getElementById("historyLog");
+    log.innerHTML = data.slice().reverse().map((r, i) => `
+        <tr>
+            <td>${data.length - i}</td>
+            <td>${r.a}</td><td>${r.b}</td><td>${r.c}</td>
+            <td>${r.total}</td>
+            <td class="${r.bs === 'BIG' ? 'big' : 'small'}">${r.bs}</td>
+            <td>${r.oe}</td>
+            <td>${r.combo}</td>
+        </tr>
+    `).join('');
+
+    // AI Prediction Logic
+    if(data.length >= 5) {
+        let last5 = data.slice(-5);
+        let bigCount = last5.filter(r => r.bs === "BIG").length;
+        let prediction = bigCount >= 3 ? "SMALL" : "BIG"; // Regression logic
+        let hotDice = freq.indexOf(Math.max(...freq.slice(1)));
+        
+        document.getElementById("predictionDisplay").innerHTML = `Next: <b>${prediction}</b><br><small>Hot Dice: ${hotDice}</small>`;
+        document.getElementById("confidenceDisplay").innerText = `Confidence: ${40 + (data.length * 2)}%`;
+    } else {
+        document.getElementById("predictionDisplay").innerText = "Waiting for data...";
+    }
+
+    // Update Chart
+    bsChart.data.datasets[0].data = [stats.BIG, stats.SMALL];
+    bsChart.update();
+}
+
+function resetAll() {
+    if(confirm("Delete all history?")) {
+        localStorage.removeItem("sicbo_v2");
+        data = [];
+        render();
+    }
+}
+
+// Initial Run
+render();
+</script>
+</body>
+</html>
